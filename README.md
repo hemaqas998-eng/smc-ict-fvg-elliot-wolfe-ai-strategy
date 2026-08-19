@@ -1,2 +1,113 @@
-# smc-ict-fvg-elliot-wolfe-ai-strategy
-Advanced Pine Script trading strategy combining SMC, ICT, FVG, Elliott Wave, Wolfe Wave with AI entry signals and automated TP/SL
+# 🤖 AI Smart Signals - Peak & Bottom Hunter
+## AI منظومة الإشارات الذكية - مؤشر اصطياد القمم والقيعان
+
+---
+
+## 📋 نظرة عامة | Overview
+
+مؤشر ذكي متقدم يجمع بين تقنيات التحليل الفني المتخصصة:
+- **SMC (Smart Money Concepts)** - مفاهيم المال الذكي
+- **ICT (Institutional Trading Techniques)** - تقنيات التداول المؤسسي
+- **FVG (Fair Value Gaps)** - فجوات القيمة العادلة
+- **Elliott Wave & Wolfe Wave** - موجات إليوت وولف
+- **AI Machine Learning Scoring** - نظام تقييم الذكاء الاصطناعي
+
+### المميزات الرئيسية:
+✅ اصطياد تلقائي للقمم (Peaks) والقيعان (Bottoms)  
+✅ إشارات شراء/بيع بثقة عالية من الذكاء الاصطناعي  
+✅ مستويات TP (Take Profit) و SL (Stop Loss) تلقائية  
+✅ يعمل مع جميع الأسواق المالية  
+✅ يدعم استراتيجيات: المضاربة (Scalping) والتأرجح (Swing) واليومي (Daily)  
+✅ واجهة ثنائية اللغة (English & العربية)  
+
+---
+
+## 🎯 الأسواق المدعومة | Supported Markets
+
+| السوق | المتغير | الرموز |
+|------|---------|--------|
+| 🪙 **العملات المشفرة** | CRYPTO | BTC, ETH, BNB, SOL |
+| 💱 **الفوركس** | FOREX | EURUSD, GBPUSD, AUDUSD |
+| 🥇 **الذهب** | GOLD | XAUUSD, Gold |
+| 📊 **المؤشرات** | INDICES | SPX, DXY, NIKKEI |
+| 📈 **الأسهم** | STOCKS | AAPL, GOOGL, MSFT |
+
+---
+
+## ⏱️ الاستراتيجيات المدعومة | Supported Strategies
+
+### 1️⃣ المضاربة (SCALPING) - 1-15 دقيقة
+- **وقت الاحتفاظ**: ثوان إلى دقائق
+- **الربح المتوقع**: 0.3% - 0.5%
+- **الخسارة المحددة**: 0.1% - 0.15%
+- **النسبة R:R**: 3:1
+- **الإطارات الزمنية**: 1M, 3M, 5M, 15M
+
+### 2️⃣ التأرجح (SWING) - 30 دقيقة إلى 4 ساعات
+- **وقت الاحتفاظ**: ساعات إلى أيام
+- **الربح المتوقع**: 0.8% - 1.5%
+- **الخسارة المحددة**: 0.3% - 0.5%
+- **النسبة R:R**: 2-3:1
+- **الإطارات الزمنية**: 30M, 1H, 2H, 4H
+
+### 3️⃣ اليومي (DAILY) - يومي وأسبوعي
+- **وقت الاحتفاظ**: أيام إلى أسابيع
+- **الربح المتوقع**: 2% - 5%
+- **الخسارة المحددة**: 0.8% - 1.2%
+- **النسبة R:R**: 2-4:1
+- **الإطارات الزمنية**: Daily, Weekly
+
+---
+
+## 🔧 إعدادات المؤشر | Indicator Settings
+
+### الإعدادات الأساسية:
+- **Language**: EN (English) / AR (العربية)
+- **Strategy Mode**: AUTO / SCALPING / SWING / DAILY
+- **Market Type**: AUTO / CRYPTO / FOREX / GOLD / INDICES / STOCKS
+
+---
+
+## 📊 أنماط التحليل الفني | Technical Patterns
+
+### FVG - فجوة القيمة العادلة
+تشكل منطقة دعم أو مقاومة لم تملأ بعد
+
+### BOS - كسر البنية
+كسر أعلى من قمة سابقة أو أقل من قاع سابق
+
+### Divergence - الاختلاف
+عدم توافق بين حركة السعر ومؤشر RSI
+
+### Pin Bars - شموع الدبوس
+شموع بأجسام صغيرة وذيول طويلة تشير لانعكاس
+
+---
+
+## 🛠️ التثبيت | Installation
+
+1. اذهب إلى [المستودع](https://github.com/hemaqas998-eng/smc-ict-fvg-elliot-wolfe-ai-strategy)
+2. انسخ كود المؤشر الذي تختاره
+3. افتح TradingView واذهب إلى Pine Script Editor
+4. الصق الكود واضغط "Add to Chart"
+5. اختر إعداداتك المفضلة
+
+---
+
+## ⚠️ تحذيرات مهمة | Important Warnings
+
+⚠️ **تحذير قانوني**: هذا المؤشر مخصص للاستخدام التعليمي فقط وليس نصيحة مالية
+- التداول يحمل مخاطر خسارة كاملة لرأس المال
+- لا تتاجر بأموال لا تستطيع خسارتها
+- استشر مستشار مالي قبل الاستثمار
+
+---
+
+## 📞 الدعم | Support
+
+📧 Email: hemaqas998@gmail.com  
+🔗 GitHub: hemaqas998-eng
+
+---
+
+**النسخة**: 1.0 | **الحالة**: ✅ مستقر وجاهز للاستخدام

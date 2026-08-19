@@ -1,0 +1,256 @@
+//@version=5
+indicator("🤖 AI Smart Signals - Peak & Bottom Hunter | مؤشر اصطياد القمم والقيعان", overlay=true, max_boxes_count=500)
+
+// ====================== LANGUAGE SELECTION ======================
+language = input.string("EN", "Language | اللغة", options=["EN", "AR"])
+
+getLabel(en, ar) => language == "EN" ? en : ar
+
+// ====================== TIMEFRAME & STRATEGY SELECTION ======================
+strategyMode = input.string("AUTO", getLabel("Strategy Mode", "نمط الاستراتيجية"), options=["AUTO", "SCALPING", "SWING", "DAILY"])
+
+currentTimeframe = timeframe.period
+isScalping = strategyMode == "AUTO" ? (currentTimeframe == "1" or currentTimeframe == "3" or currentTimeframe == "5" or currentTimeframe == "15") : (strategyMode == "SCALPING")
+isSwing = strategyMode == "AUTO" ? (currentTimeframe == "30" or currentTimeframe == "60" or currentTimeframe == "120" or currentTimeframe == "240") : (strategyMode == "SWING")
+isDaily = strategyMode == "AUTO" ? (currentTimeframe == "D" or currentTimeframe == "W") : (strategyMode == "DAILY")
+
+// ====================== MARKET DETECTION ======================
+marketInput = input.string("AUTO", getLabel("Market Type", "نوع السوق"), options=["AUTO", "CRYPTO", "FOREX", "GOLD", "INDICES", "STOCKS"])
+
+isCrypto = marketInput == "AUTO" ? (syminfo.type == "crypto") : (marketInput == "CRYPTO")
+isForex = marketInput == "AUTO" ? (syminfo.type == "forex") : (marketInput == "FOREX")
+isGold = marketInput == "AUTO" ? (syminfo.description == "XAUUSD") : (marketInput == "GOLD")
+isIndices = marketInput == "AUTO" ? (syminfo.type == "index") : (marketInput == "INDICES")
+isStocks = marketInput == "AUTO" ? (syminfo.type == "stock") : (marketInput == "STOCKS")
+
+// ====================== STRATEGY-SPECIFIC PARAMETERS ======================
+
+scalp_SwingLen = input(2, getLabel("Scalp Swing Length", "طول التأرجح - مضاربة"), minval=1)
+scalp_RSI = input(14, getLabel("Scalp RSI Length", "RSI مضاربة"), minval=1)
+scalp_ConfidenceMin = input(0.70, getLabel("Scalp Min Confidence", "ثقة مضاربة"))
+
+swing_SwingLen = input(5, getLabel("Swing Length", "طول التأرجح - سوينغ"), minval=1)
+swing_RSI = input(14, getLabel("Swing RSI Length", "RSI سوينغ"), minval=1)
+swing_ConfidenceMin = input(0.65, getLabel("Swing Min Confidence", "ثقة سوينغ"))
+
+daily_SwingLen = input(7, getLabel("Daily Swing Length", "طول التأرجح - يومي"), minval=1)
+daily_RSI = input(21, getLabel("Daily RSI Length", "RSI يومي"), minval=1)
+daily_ConfidenceMin = input(0.60, getLabel("Daily Min Confidence", "ثقة يومي"))
+
+// Select parameters
+swingLength = isScalping ? scalp_SwingLen : (isSwing ? swing_SwingLen : daily_SwingLen)
+rsiLength = isScalping ? scalp_RSI : (isSwing ? swing_RSI : daily_RSI)
+confidenceMin = isScalping ? scalp_ConfidenceMin : (isSwing ? swing_ConfidenceMin : daily_ConfidenceMin)
+
+// Common parameters
+stochLength = input(14, getLabel("Stochastic Length", "طول العشوائي"))
+stochSmooth = input(3, getLabel("Stochastic Smooth", "تمويع العشوائي"))
+macdFast = input(12, getLabel("MACD Fast", "MACD سريع"))
+macdSlow = input(26, getLabel("MACD Slow", "MACD بطيء"))
+macdSignal = input(9, getLabel("MACD Signal", "إشارة MACD"))
+fvgSize = input(0.5, getLabel("FVG Size %", "حجم الفجوة %"))
+atrLength = input(14, getLabel("ATR Length", "طول ATR"))
+divergenceLength = input(5, getLabel("Divergence Length", "طول الاختلاف"))
+
+// Display Settings
+showTPSL = input(true, getLabel("Show TP/SL Lines", "عرض مستويات الربح/الخسارة"))
+showTable = input(true, getLabel("Show Info Table", "عرض جدول المعلومات"))
+
+// ====================== CORE CALCULATIONS ======================
+
+rsi = ta.rsi(close, rsiLength)
+stochK = ta.stoch(close, high, low, stochLength)
+stochD = ta.sma(stochK, stochSmooth)
+[macdLine, macdSignalLine, macdHistogram] = ta.macd(close, macdFast, macdSlow, macdSignal)
+
+volSMA = ta.sma(volume, 20)
+volRatio = volume / volSMA
+volConfirm = volRatio > 1.2
+
+atr = ta.atr(atrLength)
+highestHigh = ta.highest(high, swingLength)
+lowestLow = ta.lowest(low, swingLength)
+priceRange = high - low
+avgRange = ta.sma(priceRange, 20)
+
+// ====================== PEAK & BOTTOM DETECTION ======================
+
+// Peak (Swing High)
+isPeak = high[swingLength] > ta.highest(high[1], swingLength) and high[swingLength] > ta.highest(high[swingLength+1], swingLength)
+peakPrice = high[swingLength]
+
+// Bottom (Swing Low)
+isBottom = low[swingLength] < ta.lowest(low[1], swingLength) and low[swingLength] < ta.lowest(low[swingLength+1], swingLength)
+bottomPrice = low[swingLength]
+
+// Break of Structure
+bosUp = close > highestHigh and close[1] <= highestHigh
+bosDown = close < lowestLow and close[1] >= lowestLow
+
+// Fair Value Gap
+fvgUp = low > high[2] and (high[2] - low) / high[2] * 100 > fvgSize
+fvgDown = high < low[2] and (low - high[2]) / low * 100 > fvgSize
+
+// Divergence
+bullDivergence = low < low[divergenceLength] and rsi > rsi[divergenceLength] and rsi < 35
+bearDivergence = high > high[divergenceLength] and rsi < rsi[divergenceLength] and rsi > 65
+
+// Pin Bars
+pinBarUp = (open < close) and (close > open + ((high - low) * 0.75)) and (low < open - ((high - low) * 0.25))
+pinBarDown = (open > close) and (close < open - ((high - low) * 0.75)) and (high > open + ((high - low) * 0.25))
+
+// ====================== AI SCORING SYSTEM ======================
+
+trendScore = 0.0
+trendScore += (close > ta.sma(close, 50) ? 15 : 0)
+trendScore += (close > ta.sma(close, 200) ? 15 : 0)
+trendScore += (macdLine > macdSignalLine ? 20 : 0)
+trendScore += (rsi > 50 ? 15 : 0)
+trendScore += (stochK > stochD ? 15 : 0)
+trendScore += (volConfirm ? 10 : 0)
+
+momentumScore = 0.0
+momentumScore += ((rsi - rsi[1]) > 0 ? 20 : 0)
+momentumScore += (stochK > stochD ? 20 : 0)
+momentumScore += (macdHistogram > macdHistogram[1] ? 20 : 0)
+momentumScore += (close > close[5] ? 20 : 0)
+
+patternScore = 0.0
+patternScore += (bosUp ? 25 : 0)
+patternScore += (fvgUp ? 25 : 0)
+patternScore += (bullDivergence ? 25 : 0)
+patternScore += (pinBarUp ? 15 : 0)
+patternScore += (isBottom ? 10 : 0)
+
+confirmationScore = 0.0
+confirmationScore += (rsi < 40 ? 20 : 0)
+confirmationScore += (stochK < 30 ? 20 : 0)
+confirmationScore += (volConfirm ? 20 : 0)
+confirmationScore += (priceRange > avgRange ? 20 : 0)
+
+bearTrendScore = 0.0
+bearTrendScore += (close < ta.sma(close, 50) ? 15 : 0)
+bearTrendScore += (close < ta.sma(close, 200) ? 15 : 0)
+bearTrendScore += (macdLine < macdSignalLine ? 20 : 0)
+bearTrendScore += (rsi < 50 ? 15 : 0)
+
+bearPatternScore = 0.0
+bearPatternScore += (bosDown ? 25 : 0)
+bearPatternScore += (fvgDown ? 25 : 0)
+bearPatternScore += (bearDivergence ? 25 : 0)
+bearPatternScore += (pinBarDown ? 15 : 0)
+bearPatternScore += (isPeak ? 10 : 0)
+
+bearConfirmationScore = 0.0
+bearConfirmationScore += (rsi > 60 ? 20 : 0)
+bearConfirmationScore += (stochK > 70 ? 20 : 0)
+bearConfirmationScore += (volConfirm ? 20 : 0)
+
+aiConfidenceBuy = (patternScore + confirmationScore + momentumScore) / 300
+aiConfidenceSell = (bearPatternScore + bearConfirmationScore + momentumScore) / 300
+
+// ====================== SIGNALS ======================
+
+buySignal = (fvgUp or bosUp or bullDivergence or pinBarUp) and 
+            (rsi < 50) and 
+            (stochK < 50) and
+            volConfirm and
+            aiConfidenceBuy > confidenceMin and
+            isBottom
+
+sellSignal = (fvgDown or bosDown or bearDivergence or pinBarDown) and 
+             (rsi > 50) and 
+             (stochK > 50) and
+             volConfirm and
+             aiConfidenceSell > confidenceMin and
+             isPeak
+
+// ====================== TP/SL CALCULATION ======================
+
+tp_Percent = isScalping ? 0.3 : (isSwing ? 0.8 : 2.0)
+sl_Percent = isScalping ? 0.1 : (isSwing ? 0.3 : 0.8)
+
+entryPrice = close
+tp1Buy = entryPrice * (1 + tp_Percent / 100)
+tp2Buy = entryPrice * (1 + tp_Percent * 1.5 / 100)
+slBuy = entryPrice * (1 - sl_Percent / 100)
+
+tp1Sell = entryPrice * (1 - tp_Percent / 100)
+tp2Sell = entryPrice * (1 - tp_Percent * 1.5 / 100)
+slSell = entryPrice * (1 + sl_Percent / 100)
+
+// ====================== PLOTTING - PEAKS & BOTTOMS ======================
+
+// Plot Peaks (Red Circles)
+plotshape(isPeak and not buySignal, title=getLabel("Peak", "قمة"), style=shape.circle, location=location.abovebar, 
+          color=color.new(color.red, 0), size=size.small, text=getLabel("H", "ق"), textcolor=color.white)
+
+// Plot Bottoms (Green Circles)
+plotshape(isBottom and not sellSignal, title=getLabel("Bottom", "قاع"), style=shape.circle, location=location.belowbar, 
+          color=color.new(color.green, 0), size=size.small, text=getLabel("L", "ع"), textcolor=color.white)
+
+// ====================== PLOTTING - AI SIGNALS (MAIN) ======================
+
+// BUY Signal - Large Triangle at Bottom
+plotshape(buySignal, title=getLabel("🤖 AI BUY", "🤖 شراء ذكي"), style=shape.triangleup, location=location.belowbar, 
+          color=color.new(color.green, 0), size=size.large, text=getLabel("BUY", "شراء"), textcolor=color.white)
+
+// SELL Signal - Large Triangle at Top
+plotshape(sellSignal, title=getLabel("🤖 AI SELL", "🤖 بيع ذكي"), style=shape.triangledown, location=location.abovebar, 
+          color=color.new(color.red, 0), size=size.large, text=getLabel("SELL", "بيع"), textcolor=color.white)
+
+// ====================== PLOTTING - TP/SL LINES ======================
+
+if showTPSL
+    // Buy TP/SL Lines
+    if buySignal
+        line.new(bar_index, tp1Buy, bar_index + 20, tp1Buy, xloc=xloc.bar_index, color=color.new(color.green, 50), width=1, style=line.solid)
+        line.new(bar_index, tp2Buy, bar_index + 20, tp2Buy, xloc=xloc.bar_index, color=color.new(color.lime, 50), width=1, style=line.solid)
+        line.new(bar_index, slBuy, bar_index + 20, slBuy, xloc=xloc.bar_index, color=color.new(color.red, 50), width=1, style=line.solid)
+        line.new(bar_index, entryPrice, bar_index + 20, entryPrice, xloc=xloc.bar_index, color=color.new(color.blue, 50), width=2, style=line.dashed)
+    
+    // Sell TP/SL Lines
+    if sellSignal
+        line.new(bar_index, tp1Sell, bar_index + 20, tp1Sell, xloc=xloc.bar_index, color=color.new(color.maroon, 50), width=1, style=line.solid)
+        line.new(bar_index, tp2Sell, bar_index + 20, tp2Sell, xloc=xloc.bar_index, color=color.new(color.burgundy, 50), width=1, style=line.solid)
+        line.new(bar_index, slSell, bar_index + 20, slSell, xloc=xloc.bar_index, color=color.new(color.darkred, 50), width=1, style=line.solid)
+        line.new(bar_index, entryPrice, bar_index + 20, entryPrice, xloc=xloc.bar_index, color=color.new(color.orange, 50), width=2, style=line.dashed)
+
+// Bar Color for signals
+barcolor(buySignal ? color.new(color.green, 30) : (sellSignal ? color.new(color.red, 30) : na))
+
+// ====================== INFO TABLE (MINIMAL) ======================
+
+if showTable and barstate.islast
+    var table infoTable = table.new(position=position.bottom_right, columns=2, rows=6, 
+                                    border_color=color.new(color.gray, 80), border_width=1, frame_color=color.new(color.gray, 80), frame_width=1)
+    
+    // Strategy & Market
+    strategyText = isScalping ? getLabel("⚡ SCALP", "⚡ مضاربة") : (isSwing ? getLabel("📊 SWING", "📊 تأرجح") : getLabel("📈 DAILY", "📈 يومي"))
+    marketText = isCrypto ? getLabel("🪙 CRYPTO", "🪙 عملات") : (isForex ? getLabel("💱 FOREX", "💱 فوركس") : (isGold ? getLabel("🥇 GOLD", "🥇 ذهب") : (isIndices ? getLabel("📊 IDX", "📊 مؤشرات") : getLabel("📈 STK", "📈 أسهم"))))
+    
+    table.cell(infoTable, 0, 0, strategyText + " | " + marketText, bgcolor=color.new(color.blue, 80), text_color=color.white, text_size=size.small, text_halign=text.align_center)
+    table.cell(infoTable, 1, 0, "", bgcolor=color.new(color.blue, 80))
+    
+    table.cell(infoTable, 0, 1, getLabel("BUY %", "ثقة الشراء"), bgcolor=color.new(color.green, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 1, str.tostring(math.round(aiConfidenceBuy * 100, 1)) + "%", bgcolor=color.new(color.green, 80), text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 2, getLabel("SELL %", "ثقة البيع"), bgcolor=color.new(color.red, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 2, str.tostring(math.round(aiConfidenceSell * 100, 1)) + "%", bgcolor=color.new(color.red, 80), text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 3, "RSI", bgcolor=color.new(color.teal, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 3, str.tostring(math.round(rsi, 1)), bgcolor=color.new(color.teal, 80), text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 4, getLabel("Stoch", "العشوائي"), bgcolor=color.new(color.purple, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 4, str.tostring(math.round(stochK, 1)), bgcolor=color.new(color.purple, 80), text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 5, getLabel("Vol", "الحجم"), bgcolor=color.new(color.gray, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 5, volConfirm ? getLabel("HIGH ✓", "عالي ✓") : getLabel("LOW", "منخفض"), bgcolor=color.new(color.gray, 80), text_color=color.white, text_size=size.small)
+
+// ====================== ALERTS ======================
+
+alertcondition(buySignal, title=getLabel("🤖 AI BUY SIGNAL", "🤖 إشارة شراء ذكية"), 
+               message=getLabel("🤖 BUY! Confidence: ", "🤖 شراء! الثقة: ") + str.tostring(math.round(aiConfidenceBuy * 100, 2)) + "% | Entry: " + str.tostring(math.round(entryPrice, 4)) + " | TP1: " + str.tostring(math.round(tp1Buy, 4)) + " | SL: " + str.tostring(math.round(slBuy, 4)))
+
+alertcondition(sellSignal, title=getLabel("🤖 AI SELL SIGNAL", "🤖 إشارة بيع ذكية"), 
+               message=getLabel("🤖 SELL! Confidence: ", "🤖 بيع! الثقة: ") + str.tostring(math.round(aiConfidenceSell * 100, 2)) + "% | Entry: " + str.tostring(math.round(entryPrice, 4)) + " | TP1: " + str.tostring(math.round(tp1Sell, 4)) + " | SL: " + str.tostring(math.round(slSell, 4)))

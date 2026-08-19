@@ -1,0 +1,288 @@
+//@version=5
+indicator("Multi-Market AI Signal Indicator - Universal", overlay=true)
+
+// ====================== MARKET DETECTION ======================
+marketInput = input.string("AUTO", "Market Type", options=["AUTO", "CRYPTO", "FOREX", "GOLD", "INDICES", "STOCKS"])
+
+// Auto-detect market
+isAutoDetect = marketInput == "AUTO"
+isCrypto = isAutoDetect ? (syminfo.type == "crypto") : (marketInput == "CRYPTO")
+isForex = isAutoDetect ? (syminfo.type == "forex") : (marketInput == "FOREX")
+isGold = isAutoDetect ? (syminfo.description == "XAUUSD" or syminfo.description == "GOLD") : (marketInput == "GOLD")
+isIndices = isAutoDetect ? (syminfo.type == "index") : (marketInput == "INDICES")
+isStocks = isAutoDetect ? (syminfo.type == "stock") : (marketInput == "STOCKS")
+
+// ====================== MARKET-SPECIFIC PARAMETERS ======================
+
+// Crypto Parameters (High Volatility, Fast Moves)
+cryptoSwingLen = input(3, "Crypto Swing Length", minval=1)
+cryptoRSI = input(14, "Crypto RSI Length")
+cryptoRSIOB = input(70, "Crypto RSI Overbought")
+cryptoRSIOS = input(30, "Crypto RSI Oversold")
+
+// Forex Parameters (Medium Volatility)
+forexSwingLen = input(5, "Forex Swing Length", minval=1)
+forexRSI = input(14, "Forex RSI Length")
+forexRSIOB = input(70, "Forex RSI Overbought")
+forexRSIOS = input(30, "Forex RSI Oversold")
+
+// Gold Parameters (Lower Volatility, Slower Moves)
+goldSwingLen = input(7, "Gold Swing Length", minval=1)
+goldRSI = input(21, "Gold RSI Length")
+goldRSIOB = input(70, "Gold RSI Overbought")
+goldRSIOS = input(30, "Gold RSI Oversold")
+
+// Indices Parameters (Medium-High Volatility)
+indicesSwingLen = input(6, "Indices Swing Length", minval=1)
+indicesRSI = input(14, "Indices RSI Length")
+indicesRSIOB = input(70, "Indices RSI Overbought")
+indicesRSIOS = input(30, "Indices RSI Oversold")
+
+// Stocks Parameters (Medium Volatility)
+stocksSwingLen = input(5, "Stocks Swing Length", minval=1)
+stocksRSI = input(14, "Stocks RSI Length")
+stocksRSIOB = input(70, "Stocks RSI Overbought")
+stocksRSIOS = input(30, "Stocks RSI Oversold")
+
+// ====================== SELECT PARAMETERS BASED ON MARKET ======================
+
+swingLength = isCrypto ? cryptoSwingLen : (isForex ? forexSwingLen : (isGold ? goldSwingLen : (isIndices ? indicesSwingLen : stocksSwingLen)))
+rsiLength = isCrypto ? cryptoRSI : (isForex ? forexRSI : (isGold ? goldRSI : (isIndices ? indicesRSI : stocksRSI)))
+rsiOverbought = isCrypto ? cryptoRSIOB : (isForex ? forexRSIOB : (isGold ? goldRSIOB : (isIndices ? indicesRSIOB : stocksRSIOB)))
+rsiOversold = isCrypto ? cryptoRSIOS : (isForex ? forexRSIOS : (isGold ? goldRSIOS : (isIndices ? indicesRSIOS : stocksRSIOS)))
+
+// Common Parameters
+stochLength = input(14, "Stochastic Length", minval=1)
+stochSmooth = input(3, "Stochastic Smooth", minval=1)
+macdFast = input(12, "MACD Fast", minval=5)
+macdSlow = input(26, "MACD Slow", minval=10)
+macdSignal = input(9, "MACD Signal", minval=5)
+fvgSize = input(0.5, "FVG Size %", minval=0.1)
+atrLength = input(14, "ATR Length", minval=1)
+divergenceLength = input(5, "Divergence Length", minval=2)
+ml_threshold = input(0.65, "AI Confidence Threshold", minval=0.5, maxval=0.95, step=0.05)
+
+// ====================== CORE CALCULATIONS ======================
+
+// RSI
+rsi = ta.rsi(close, rsiLength)
+rsiChange = rsi - rsi[1]
+rsiMomentum = ta.sma(rsiChange, 5)
+
+// Stochastic
+stochK = ta.stoch(close, high, low, stochLength)
+stochD = ta.sma(stochK, stochSmooth)
+stochMomentum = stochK - stochD
+
+// MACD
+[macdLine, macdSignalLine, macdHistogram] = ta.macd(close, macdFast, macdSlow, macdSignal)
+
+// Volume Analysis
+volSMA = ta.sma(volume, 20)
+volRatio = volume / volSMA
+volConfirm = volRatio > 1.2
+
+// ATR Volatility
+atr = ta.atr(atrLength)
+atrSMA = ta.sma(atr, 10)
+highVol = atr > atrSMA * 1.2
+
+// Price Action
+highestHigh = ta.highest(high, swingLength)
+lowestLow = ta.lowest(low, swingLength)
+priceRange = high - low
+avgRange = ta.sma(priceRange, 20)
+
+// Swing Points
+swingHigh = high[swingLength] > ta.highest(high[1], swingLength) and high[swingLength] > ta.highest(high[swingLength+1], swingLength)
+swingLow = low[swingLength] < ta.lowest(low[1], swingLength) and low[swingLength] < ta.lowest(low[swingLength+1], swingLength)
+
+// Break of Structure
+bosUp = close > highestHigh and close[1] <= highestHigh
+bosDown = close < lowestLow and close[1] >= lowestLow
+
+// Fair Value Gap
+fvgUp = low > high[2] and (high[2] - low) / high[2] * 100 > fvgSize
+fvgDown = high < low[2] and (low - high[2]) / low * 100 > fvgSize
+
+// Divergence
+bullDivergence = low < low[divergenceLength] and rsi > rsi[divergenceLength] and rsi < rsiOversold
+bearDivergence = high > high[divergenceLength] and rsi < rsi[divergenceLength] and rsi > rsiOverbought
+
+// Pin Bars
+pinBarUp = (open < close) and (close > open + ((high - low) * 0.75)) and (low < open - ((high - low) * 0.25))
+pinBarDown = (open > close) and (close < open - ((high - low) * 0.75)) and (high > open + ((high - low) * 0.25))
+
+// ====================== MARKET-SPECIFIC ADJUSTMENTS ======================
+
+// Crypto: More aggressive, faster confirmation
+cryptoVolMultiplier = 1.3
+cryptoPatternWeight = 1.2
+
+// Forex: Balanced approach
+forexVolMultiplier = 1.0
+forexPatternWeight = 1.0
+
+// Gold: Conservative, slower moves
+goldVolMultiplier = 0.8
+goldPatternWeight = 0.9
+
+// Indices: Balanced-aggressive
+indicesVolMultiplier = 1.1
+indicesPatternWeight = 1.1
+
+// Stocks: Conservative
+stocksVolMultiplier = 0.9
+stocksPatternWeight = 0.95
+
+// Select multipliers based on market
+volMultiplier = isCrypto ? cryptoVolMultiplier : (isForex ? forexVolMultiplier : (isGold ? goldVolMultiplier : (isIndices ? indicesVolMultiplier : stocksVolMultiplier)))
+patternWeight = isCrypto ? cryptoPatternWeight : (isForex ? forexPatternWeight : (isGold ? goldPatternWeight : (isIndices ? indicesPatternWeight : stocksPatternWeight)))
+
+// ====================== AI SCORING SYSTEM ======================
+
+// Trend Score
+trendScore = 0.0
+trendScore += (close > ta.sma(close, 50) ? 15 : 0)
+trendScore += (close > ta.sma(close, 200) ? 15 : 0)
+trendScore += (macdLine > macdSignalLine ? 20 : 0)
+trendScore += (rsi > 50 ? 15 : 0)
+trendScore += (stochK > stochD ? 15 : 0)
+trendScore += (volConfirm ? 10 : 0)
+trendScore += (highVol ? 10 : 0)
+trendScore = trendScore * volMultiplier
+
+// Momentum Score
+momentumScore = 0.0
+momentumScore += (rsiMomentum > 0 ? 20 : 0)
+momentumScore += (stochMomentum > 0 ? 20 : 0)
+momentumScore += (macdHistogram > macdHistogram[1] ? 20 : 0)
+momentumScore += math.abs(rsiChange) > 2 ? 20 : 0
+momentumScore += (close > close[5] ? 20 : 0)
+
+// Pattern Score (Bullish)
+patternScore = 0.0
+patternScore += (bosUp ? 25 : 0)
+patternScore += (fvgUp ? 25 : 0)
+patternScore += (bullDivergence ? 25 : 0)
+patternScore += (pinBarUp ? 15 : 0)
+patternScore += (swingLow ? 10 : 0)
+patternScore = patternScore * patternWeight
+
+// Confirmation Score
+confirmationScore = 0.0
+confirmationScore += (rsi < rsiOversold ? 20 : 0)
+confirmationScore += (stochK < 20 ? 20 : 0)
+confirmationScore += (volConfirm ? 20 : 0)
+confirmationScore += (priceRange > avgRange ? 20 : 0)
+confirmationScore += (macdHistogram > 0 ? 20 : 0)
+
+// Bearish Scores
+bearTrendScore = 0.0
+bearTrendScore += (close < ta.sma(close, 50) ? 15 : 0)
+bearTrendScore += (close < ta.sma(close, 200) ? 15 : 0)
+bearTrendScore += (macdLine < macdSignalLine ? 20 : 0)
+bearTrendScore += (rsi < 50 ? 15 : 0)
+bearTrendScore += (stochK < stochD ? 15 : 0)
+bearTrendScore = bearTrendScore * volMultiplier
+
+bearPatternScore = 0.0
+bearPatternScore += (bosDown ? 25 : 0)
+bearPatternScore += (fvgDown ? 25 : 0)
+bearPatternScore += (bearDivergence ? 25 : 0)
+bearPatternScore += (pinBarDown ? 15 : 0)
+bearPatternScore += (swingHigh ? 10 : 0)
+bearPatternScore = bearPatternScore * patternWeight
+
+bearConfirmationScore = 0.0
+bearConfirmationScore += (rsi > rsiOverbought ? 20 : 0)
+bearConfirmationScore += (stochK > 80 ? 20 : 0)
+bearConfirmationScore += (volConfirm ? 20 : 0)
+bearConfirmationScore += (macdHistogram < 0 ? 20 : 0)
+
+// AI Confidence
+aiConfidenceBuy = (patternScore + confirmationScore + momentumScore) / (300 * volMultiplier)
+aiConfidenceSell = (bearPatternScore + bearConfirmationScore + momentumScore) / (300 * volMultiplier)
+
+// Buy/Sell Signals
+buyCondition = (fvgUp or bosUp or bullDivergence or pinBarUp) and 
+               (rsi < rsiOversold + 10) and 
+               (stochK < 50) and
+               volConfirm and
+               aiConfidenceBuy > ml_threshold
+
+sellCondition = (fvgDown or bosDown or bearDivergence or pinBarDown) and 
+                (rsi > rsiOverbought - 10) and 
+                (stochK > 50) and
+                volConfirm and
+                aiConfidenceSell > ml_threshold
+
+// ====================== PLOTTING ======================
+
+// Market Label
+marketLabel = isCrypto ? "CRYPTO 🪙" : (isForex ? "FOREX 💱" : (isGold ? "GOLD 🥇" : (isIndices ? "INDICES 📊" : "STOCKS 📈")))
+var label marketLbl = na
+if barstate.islast
+    marketLbl := label.new(bar_index, high * 1.05, marketLabel, xloc=xloc.bar_index, yloc=yloc.abovebar, 
+                           color=color.new(color.blue, 80), textcolor=color.white, size=size.large, style=label.style_label_down)
+
+// Swing Points
+plot(swingHigh ? high[swingLength] : na, "Swing High", color.new(color.red, 0), linewidth=2, style=plot.style_circles)
+plot(swingLow ? low[swingLength] : na, "Swing Low", color.new(color.green, 0), linewidth=2, style=plot.style_circles)
+
+// BOS
+plotshape(bosUp, title="BOS UP", style=shape.labelup, location=location.belowbar, color=color.new(color.lime, 0), size=size.small, text="BOS↑")
+plotshape(bosDown, title="BOS DOWN", style=shape.labeldown, location=location.abovebar, color=color.new(color.red, 0), size=size.small, text="BOS↓")
+
+// FVG
+plotshape(fvgUp, title="FVG Up", style=shape.square, location=location.belowbar, color=color.new(color.blue, 60), size=size.tiny)
+plotshape(fvgDown, title="FVG Down", style=shape.square, location=location.abovebar, color=color.new(color.orange, 60), size=size.tiny)
+
+// Divergence
+plotshape(bullDivergence, title="Bull Div", style=shape.labelup, location=location.belowbar, color=color.new(color.lightgreen, 0), size=size.small, text="DIV↑")
+plotshape(bearDivergence, title="Bear Div", style=shape.labeldown, location=location.abovebar, color=color.new(color.lightcoral, 0), size=size.small, text="DIV↓")
+
+// AI Signals
+plotshape(buyCondition, title="🤖 AI BUY", style=shape.triangleup, location=location.belowbar, 
+          color=color.new(color.green, 0), size=size.large, text="BUY", textcolor=color.white)
+
+plotshape(sellCondition, title="🤖 AI SELL", style=shape.triangledown, location=location.abovebar, 
+          color=color.new(color.red, 0), size=size.large, text="SELL", textcolor=color.white)
+
+// Bar Color
+barcolor(buyCondition ? color.new(color.green, 30) : (sellCondition ? color.new(color.red, 30) : na))
+
+// ====================== INFO TABLE ======================
+
+var table infoTable = table.new(position=position.top_right, columns=2, rows=7, 
+                                border_color=color.gray, border_width=1, frame_color=color.gray, frame_width=1)
+
+if barstate.islast
+    table.cell(infoTable, 0, 0, "📍 " + marketLabel, bgcolor=color.new(color.blue, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 0, "", bgcolor=color.new(color.blue, 80))
+    
+    table.cell(infoTable, 0, 1, "AI BUY %", bgcolor=color.new(color.green, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 1, str.tostring(math.round(aiConfidenceBuy * 100, 2)), bgcolor=color.new(color.green, 80), text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 2, "AI SELL %", bgcolor=color.new(color.red, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 2, str.tostring(math.round(aiConfidenceSell * 100, 2)), bgcolor=color.new(color.red, 80), text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 3, "RSI", bgcolor=color.new(color.teal, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 3, str.tostring(math.round(rsi, 2)), bgcolor=color.new(color.teal, 80), text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 4, "Stoch %K", bgcolor=color.new(color.purple, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 4, str.tostring(math.round(stochK, 2)), bgcolor=color.new(color.purple, 80), text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 5, "Trend", bgcolor=color.new(color.navy, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 5, str.tostring(math.round(trendScore, 1)), bgcolor=color.new(color.navy, 80), text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 6, "Vol Status", bgcolor=color.new(color.maroon, 80), text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 6, volConfirm ? "HIGH ✓" : "LOW", bgcolor=color.new(color.maroon, 80), text_color=color.white, text_size=size.small)
+
+// ====================== ALERTS ======================
+
+alertcondition(buyCondition, title="🤖 AI BUY SIGNAL (" + marketLabel + ")", 
+               message="AI BUY SIGNAL! Market: " + marketLabel + " | Confidence: " + str.tostring(math.round(aiConfidenceBuy * 100, 2)) + "%")
+
+alertcondition(sellCondition, title="🤖 AI SELL SIGNAL (" + marketLabel + ")", 
+               message="AI SELL SIGNAL! Market: " + marketLabel + " | Confidence: " + str.tostring(math.round(aiConfidenceSell * 100, 2)) + "%")

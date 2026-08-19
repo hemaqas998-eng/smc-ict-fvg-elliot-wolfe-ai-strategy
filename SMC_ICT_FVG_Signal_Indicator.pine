@@ -1,0 +1,115 @@
+//@version=5
+indicator("SMC/ICT FVG AI Signal Indicator", overlay=true)
+
+// ====================== INPUTS ======================
+// Swing High/Low Settings
+swingLength = input(5, "Swing Length", minval=1)
+
+// RSI Settings
+rsiLength = input(14, "RSI Length", minval=1)
+rsiOverbought = input(70, "RSI Overbought", minval=50, maxval=100)
+rsiOversold = input(30, "RSI Oversold", minval=0, maxval=50)
+
+// Stochastic Settings
+stochLength = input(14, "Stochastic Length", minval=1)
+stochSmooth = input(3, "Stochastic Smooth", minval=1)
+stochOverbought = input(80, "Stoch Overbought", minval=50, maxval=100)
+stochOversold = input(20, "Stoch Oversold", minval=0, maxval=50)
+
+// FVG Settings
+fvgSize = input(0.5, "FVG Size %", minval=0.1, maxval=2)
+
+// Divergence Settings
+divergenceLength = input(5, "Divergence Length", minval=2)
+
+// ====================== CALCULATIONS ======================
+
+// RSI
+rsi = ta.rsi(close, rsiLength)
+
+// Stochastic
+stochK = ta.stoch(close, high, low, stochLength)
+stochD = ta.sma(stochK, stochSmooth)
+
+// Identify Swing Highs and Lows
+swingHigh = high[swingLength] > ta.highest(high[1], swingLength) and high[swingLength] > ta.highest(high[swingLength+1], swingLength)
+swingLow = low[swingLength] < ta.lowest(low[1], swingLength) and low[swingLength] < ta.lowest(low[swingLength+1], swingLength)
+
+highestHigh = ta.highest(high, swingLength)
+lowestLow = ta.lowest(low, swingLength)
+
+// Break of Structure (BOS)
+bosUp = close > highestHigh and close[1] <= highestHigh
+bosDown = close < lowestLow and close[1] >= lowestLow
+
+// Fair Value Gap Detection
+fvgUp = low > high[2] and (high[2] - low) / high[2] * 100 > fvgSize
+fvgDown = high < low[2] and (low - high[2]) / low * 100 > fvgSize
+
+// Divergence Detection
+// Bullish Divergence: Lower Low in Price but Higher Low in RSI
+bullDivergence = low < low[divergenceLength] and rsi > rsi[divergenceLength] and rsi < rsiOversold
+
+// Bearish Divergence: Higher High in Price but Lower High in RSI
+bearDivergence = high > high[divergenceLength] and rsi < rsi[divergenceLength] and rsi > rsiOverbought
+
+// Candle Confirmation (Pin Bar / Reversal Candle)
+pinBarUp = (open < close) and (close > open + ((high - low) * 0.75)) and (low < open - ((high - low) * 0.25))
+pinBarDown = (open > close) and (close < open - ((high - low) * 0.75)) and (high > open + ((high - low) * 0.25))
+
+// Trend Reversal Signals
+buySignal = (fvgUp or bosUp or bullDivergence or pinBarUp) and (rsi < rsiOverbought or rsi < 50) and (stochK < stochOverbought or stochK < 50)
+sellSignal = (fvgDown or bosDown or bearDivergence or pinBarDown) and (rsi > rsiOversold or rsi > 50) and (stochK > stochOversold or stochK > 50)
+
+// Overbought/Oversold Confirmation
+rsiBuy = rsi < rsiOversold
+rsiSell = rsi > rsiOverbought
+stochBuy = stochK < stochOversold
+stochSell = stochK > stochOverbought
+
+// ====================== PLOTTING ======================
+
+// Swing Points
+plot(swingHigh ? high[swingLength] : na, "Swing High", color.new(color.red, 0), linewidth=2, style=plot.style_circles)
+plot(swingLow ? low[swingLength] : na, "Swing Low", color.new(color.green, 0), linewidth=2, style=plot.style_circles)
+
+// BOS Levels
+plot(bosUp ? close : na, "BOS Up", color.new(color.lime, 0), linewidth=3, style=plot.style_circles)
+plot(bosDown ? close : na, "BOS Down", color.new(color.red, 0), linewidth=3, style=plot.style_circles)
+
+// FVG Zones
+fvgUpPlot = plot(fvgUp ? low : na, "FVG Up", color.new(color.blue, 50), linewidth=2)
+fvgDownPlot = plot(fvgDown ? high : na, "FVG Down", color.new(color.orange, 50), linewidth=2)
+
+// Divergence Signals
+plotshape(bullDivergence, title="Bullish Divergence", style=shape.labelup, location=location.belowbar, color=color.new(color.green, 0), size=size.small, text="BULL DIV")
+plotshape(bearDivergence, title="Bearish Divergence", style=shape.labeldown, location=location.abovebar, color=color.new(color.red, 0), size=size.small, text="BEAR DIV")
+
+// Pin Bars
+plotshape(pinBarUp, title="Pin Bar Up", style=shape.labelup, location=location.belowbar, color=color.new(color.lightgreen, 0), size=size.small, text="PIN UP")
+plotshape(pinBarDown, title="Pin Bar Down", style=shape.labeldown, location=location.abovebar, color=color.new(color.lightcoral, 0), size=size.small, text="PIN DN")
+
+// Main Buy/Sell Signals
+plotshape(buySignal, title="AI BUY Signal", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0), size=size.large, text="BUY")
+plotshape(sellSignal, title="AI SELL Signal", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0), size=size.large, text="SELL")
+
+// RSI Overbought/Oversold
+plot(rsi, "RSI", color=color.purple, linewidth=2)
+plot(rsiOverbought, "RSI Overbought", color=color.new(color.red, 50))
+plot(rsiOversold, "RSI Oversold", color=color.new(color.green, 50))
+fill(plot(rsiOverbought, na), plot(100, na), color=color.new(color.red, 90), title="RSI Overbought Zone")
+fill(plot(rsiOversold, na), plot(0, na), color=color.new(color.green, 90), title="RSI Oversold Zone")
+
+// Stochastic Confirmation
+plot(stochK, "Stoch %K", color=color.new(color.blue, 50), linewidth=1)
+plot(stochD, "Stoch %D", color=color.new(color.orange, 50), linewidth=1)
+plot(stochOverbought, "Stoch Overbought", color=color.new(color.red, 50))
+plot(stochOversold, "Stoch Oversold", color=color.new(color.green, 50))
+
+// ====================== ALERTS ======================
+alertcondition(buySignal, title="BUY Signal Alert", message="AI BUY Signal - FVG/BOS/Divergence/Pin Bar Detected")
+alertcondition(sellSignal, title="SELL Signal Alert", message="AI SELL Signal - FVG/BOS/Divergence/Pin Bar Detected")
+alertcondition(rsiBuy, title="RSI Oversold Alert", message="RSI Oversold - Potential Buy")
+alertcondition(rsiSell, title="RSI Overbought Alert", message="RSI Overbought - Potential Sell")
+alertcondition(stochBuy, title="Stoch Oversold Alert", message="Stochastic Oversold")
+alertcondition(stochSell, title="Stoch Overbought Alert", message="Stochastic Overbought")

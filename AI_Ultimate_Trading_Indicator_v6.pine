@@ -64,7 +64,6 @@ stochD = ta.sma(stochK, stochSmooth)
 ema20 = ta.ema(close, 20)
 ema50 = ta.ema(close, 50)
 ema200 = ta.ema(close, 200)
-sma50 = ta.sma(close, 50)
 
 // Volatility & Volume
 atr = ta.atr(atrLength)
@@ -98,7 +97,6 @@ bearDiv = high > high[divergenceLength] and rsi < rsi[divergenceLength] and rsi 
 
 // Pin Bars
 bodySize = math.abs(close - open)
-totalSize = high - low
 pinBarUp = bodySize > 0 and (close > open) and (close > open + ((high - low) * 0.75)) and (low < open - ((high - low) * 0.25))
 pinBarDown = bodySize > 0 and (open > close) and (close < open - ((high - low) * 0.75)) and (high > open + ((high - low) * 0.25))
 
@@ -145,7 +143,7 @@ confirmationScoreBuy = 0.0
 confirmationScoreBuy += (rsi < 40 ? 20 : 0)
 confirmationScoreBuy += (stochK < 30 ? 20 : 0)
 confirmationScoreBuy += (volConfirm ? 20 : 0)
-confirmationScoreBuy += (priceRange > avgRange ? 20 : 0)
+confirmationScoreBuy += (avgRange > 0 and priceRange > avgRange ? 20 : 0)
 confirmationScoreBuy += (macdHistogram > 0 ? 20 : 0)
 
 // Confirmation Score (Sell)
@@ -153,7 +151,7 @@ confirmationScoreSell = 0.0
 confirmationScoreSell += (rsi > 60 ? 20 : 0)
 confirmationScoreSell += (stochK > 70 ? 20 : 0)
 confirmationScoreSell += (volConfirm ? 20 : 0)
-confirmationScoreSell += (priceRange > avgRange ? 20 : 0)
+confirmationScoreSell += (avgRange > 0 and priceRange > avgRange ? 20 : 0)
 confirmationScoreSell += (macdHistogram < 0 ? 20 : 0)
 
 // Calculate AI Confidence
@@ -161,8 +159,8 @@ aiConfidenceBuy = (patternScoreBull + confirmationScoreBuy + momentumScore) / 30
 aiConfidenceSell = (patternScoreBear + confirmationScoreSell + momentumScore) / 300
 
 // Prediction values
-bullishProbability = (aiConfidenceBuy * 100)
-bearishProbability = (aiConfidenceSell * 100)
+bullishProbability = math.min(aiConfidenceBuy * 100, 100)
+bearishProbability = math.min(aiConfidenceSell * 100, 100)
 confidenceLevel = math.abs(bullishProbability - bearishProbability)
 entryQuality = math.min(((confidenceLevel + (volConfirm ? 25 : 0) + patternScoreBull + patternScoreBear) / 2), 100)
 
@@ -227,14 +225,14 @@ barcolor(buyCondition ? color.new(color.green, 30) : (sellCondition ? color.new(
 
 if showTPSL
     if buyCondition
-        line.new(bar_index, slBuy, bar_index + 20, slBuy, xloc=xloc.bar_index, color=color.new(color.red, 50), width=2, style=line.solid, closed=true)
-        line.new(bar_index, tp1Buy, bar_index + 20, tp1Buy, xloc=xloc.bar_index, color=color.new(color.green, 50), width=1, style=line.dashed, closed=true)
-        line.new(bar_index, tp2Buy, bar_index + 20, tp2Buy, xloc=xloc.bar_index, color=color.new(color.lime, 50), width=1, style=line.dotted, closed=true)
+        line.new(bar_index, slBuy, bar_index + 20, slBuy, xloc=xloc.bar_index, color=color.new(color.red, 50), width=2, style=line.solid)
+        line.new(bar_index, tp1Buy, bar_index + 20, tp1Buy, xloc=xloc.bar_index, color=color.new(color.green, 50), width=1, style=line.dashed)
+        line.new(bar_index, tp2Buy, bar_index + 20, tp2Buy, xloc=xloc.bar_index, color=color.new(color.lime, 50), width=1, style=line.dotted)
     
     if sellCondition
-        line.new(bar_index, slSell, bar_index + 20, slSell, xloc=xloc.bar_index, color=color.new(color.red, 50), width=2, style=line.solid, closed=true)
-        line.new(bar_index, tp1Sell, bar_index + 20, tp1Sell, xloc=xloc.bar_index, color=color.new(color.maroon, 50), width=1, style=line.dashed, closed=true)
-        line.new(bar_index, tp2Sell, bar_index + 20, tp2Sell, xloc=xloc.bar_index, color=color.new(color.burgundy, 50), width=1, style=line.dotted, closed=true)
+        line.new(bar_index, slSell, bar_index + 20, slSell, xloc=xloc.bar_index, color=color.new(color.red, 50), width=2, style=line.solid)
+        line.new(bar_index, tp1Sell, bar_index + 20, tp1Sell, xloc=xloc.bar_index, color=color.new(color.maroon, 50), width=1, style=line.dashed)
+        line.new(bar_index, tp2Sell, bar_index + 20, tp2Sell, xloc=xloc.bar_index, color=color.new(color.burgundy, 50), width=1, style=line.dotted)
 
 // ====================== INFO TABLE ======================
 
@@ -311,10 +309,7 @@ if showPrediction and barstate.islast
     table.cell(predTable, 1, 2, str.tostring(math.round(bearishProbability, 1)) + "%", bgcolor=color.new(color.orange, 80), text_color=color.white, text_size=size.small, text_halign=text.align_right)
     
     // Row 3: Next Candle Prediction
-    predRsi = rsi[0]
-    predStoch = stochK[0]
-    predMacd = macdHistogram[0]
-    nextCandleBias = predRsi < 50 and predStoch < 50 and predMacd < 0 ? (language == "EN" ? "More Downside" : "هبوط إضافي") : (language == "EN" ? "More Upside" : "صعود إضافي")
+    nextCandleBias = (rsi < 50 and stochK < 50 and macdHistogram < 0) ? (language == "EN" ? "More Downside" : "هبوط إضافي") : (language == "EN" ? "More Upside" : "صعود إضافي")
     table.cell(predTable, 0, 3, getLabel("Candle Bias", "انحياز الشمعة"), bgcolor=color.new(color.navy, 80), text_color=color.white, text_size=size.small)
     table.cell(predTable, 1, 3, nextCandleBias, bgcolor=color.new(color.navy, 80), text_color=color.white, text_size=size.small, text_halign=text.align_right)
 

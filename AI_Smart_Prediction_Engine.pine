@@ -1,0 +1,282 @@
+//@version=5
+indicator("🤖 AI Smart Predictions - Trend Forecasting | ذكي للتنبؤ بالحركات", overlay=true, max_boxes_count=500, max_lines_count=500)
+
+// ====================== LANGUAGE SELECTION ======================
+language = input.string("EN", "Language | اللغة", options=["EN", "AR"])
+getLabel(en, ar) => language == "EN" ? en : ar
+
+// ====================== STRATEGY SELECTION ======================
+strategyMode = input.string("AUTO", getLabel("Strategy Mode", "نمط الاستراتيجية"), options=["AUTO", "SCALPING", "SWING", "DAILY"])
+
+currentTimeframe = timeframe.period
+isScalping = strategyMode == "AUTO" ? (currentTimeframe == "1" or currentTimeframe == "3" or currentTimeframe == "5" or currentTimeframe == "15") : (strategyMode == "SCALPING")
+isSwing = strategyMode == "AUTO" ? (currentTimeframe == "30" or currentTimeframe == "60" or currentTimeframe == "120" or currentTimeframe == "240") : (strategyMode == "SWING")
+isDaily = strategyMode == "AUTO" ? (currentTimeframe == "D" or currentTimeframe == "W") : (strategyMode == "DAILY")
+
+// ====================== MARKET DETECTION ======================
+marketInput = input.string("AUTO", getLabel("Market Type", "نوع السوق"), options=["AUTO", "CRYPTO", "FOREX", "GOLD", "INDICES", "STOCKS"])
+
+isCrypto = marketInput == "AUTO" ? (syminfo.type == "crypto") : (marketInput == "CRYPTO")
+isForex = marketInput == "AUTO" ? (syminfo.type == "forex") : (marketInput == "FOREX")
+isGold = marketInput == "AUTO" ? (syminfo.description == "XAUUSD") : (marketInput == "GOLD")
+isIndices = marketInput == "AUTO" ? (syminfo.type == "index") : (marketInput == "INDICES")
+isStocks = marketInput == "AUTO" ? (syminfo.type == "stock") : (marketInput == "STOCKS")
+
+// ====================== ADAPTIVE PARAMETERS ======================
+
+scalp_SwingLen = input(2, getLabel("Scalp Swing", "تأرجح مضاربة"), minval=1)
+swing_SwingLen = input(5, getLabel("Swing Length", "طول التأرجح"), minval=1)
+daily_SwingLen = input(7, getLabel("Daily Swing", "تأرجح يومي"), minval=1)
+
+swingLength = isScalping ? scalp_SwingLen : (isSwing ? swing_SwingLen : daily_SwingLen)
+
+// Core Indicators
+rsiLength = isScalping ? 14 : (isSwing ? 14 : 21)
+rsi = ta.rsi(close, rsiLength)
+
+stochLength = input(14, getLabel("Stochastic", "العشوائي"))
+stochK = ta.stoch(close, high, low, stochLength)
+stochD = ta.sma(stochK, 3)
+
+[macdLine, macdSignalLine, macdHistogram] = ta.macd(close, 12, 26, 9)
+
+// Momentum & Trend Indicators
+atr = ta.atr(14)
+volSMA = ta.sma(volume, 20)
+volRatio = volume / volSMA
+volConfirm = volRatio > 1.2
+
+// Price Action
+highestHigh = ta.highest(high, swingLength)
+lowestLow = ta.lowest(low, swingLength)
+ema20 = ta.ema(close, 20)
+ema50 = ta.ema(close, 50)
+ema200 = ta.ema(close, 200)
+
+// ====================== ADVANCED PATTERN DETECTION ======================
+
+// Swing Points
+swingHigh = high[swingLength] > ta.highest(high[1], swingLength) and high[swingLength] > ta.highest(high[swingLength+1], swingLength)
+swingLow = low[swingLength] < ta.lowest(low[1], swingLength) and low[swingLength] < ta.lowest(low[swingLength+1], swingLength)
+
+// BOS Detection
+bosUp = close > highestHigh and close[1] <= highestHigh
+bosDown = close < lowestLow and close[1] >= lowestLow
+
+// FVG Detection
+fvgUp = low > high[2] and (high[2] - low) / high[2] * 100 > 0.5
+fvgDown = high < low[2] and (low - high[2]) / low * 100 > 0.5
+
+// Divergence Detection
+bullDiv = low < low[5] and rsi > rsi[5] and rsi < 35
+bearDiv = high > high[5] and rsi < rsi[5] and rsi > 65
+
+// Pin Bars
+pinBarUp = (open < close) and (close > open + ((high - low) * 0.75)) and (low < open - ((high - low) * 0.25))
+pinBarDown = (open > close) and (close < open - ((high - low) * 0.75)) and (high > open + ((high - low) * 0.25))
+
+// ====================== PREDICTIVE AI SCORING ======================
+
+// Trend Direction Prediction (0-100)
+trendPrediction = 0.0
+trendPrediction += (close > ema20 ? 12 : -12)
+trendPrediction += (ema20 > ema50 ? 12 : -12)
+trendPrediction += (ema50 > ema200 ? 12 : -12)
+trendPrediction += (macdLine > macdSignalLine ? 12 : -12)
+trendPrediction += (rsi > 50 ? 12 : -12)
+trendPrediction += (stochK > stochD ? 12 : -12)
+trendPrediction += (volConfirm ? 12 : -12)
+trendPrediction += (close > close[5] ? 4 : -4)
+
+// Momentum Prediction (0-100)
+momentumPrediction = 0.0
+momentumPrediction += ((rsi - rsi[1]) > 0 ? 15 : -15)
+momentumPrediction += (stochK > stochD ? 15 : -15)
+momentumPrediction += (macdHistogram > macdHistogram[1] ? 15 : -15)
+momentumPrediction += (close > close[5] ? 15 : -15)
+momentumPrediction += ((atr / ta.sma(atr, 10)) > 1.2 ? 15 : -15)
+momentumPrediction += (macdLine > 0 ? 10 : -10)
+
+// Pattern Confirmation Score (0-100)
+patternScore = 0.0
+if swingLow
+    patternScore += (fvgUp ? 25 : 0)
+    patternScore += (bosUp ? 25 : 0)
+    patternScore += (bullDiv ? 25 : 0)
+    patternScore += (pinBarUp ? 15 : 0)
+    patternScore += (volConfirm ? 10 : 0)
+else if swingHigh
+    patternScore -= (fvgDown ? 25 : 0)
+    patternScore -= (bosDown ? 25 : 0)
+    patternScore -= (bearDiv ? 25 : 0)
+    patternScore -= (pinBarDown ? 15 : 0)
+    patternScore -= (volConfirm ? 10 : 0)
+
+// Support/Resistance Strength
+supportLevel = ta.lowest(low, 20)
+resistanceLevel = ta.highest(high, 20)
+distToSupport = close - supportLevel
+distToResist = resistanceLevel - close
+srRatio = math.min(distToSupport / atr, distToResist / atr)
+srStrength = math.min(srRatio / 5 * 100, 100)
+
+// ====================== NEXT MOVE PREDICTION ENGINE ======================
+
+// Combine all factors into prediction
+bullishProbability = (trendPrediction + momentumPrediction + patternScore) / 300 * 100
+bearishProbability = 100 - bullishProbability
+
+// Next candle prediction
+nextMovePrediction = bullishProbability > bearishProbability ? "BULLISH" : "BEARISH"
+nextMovePredictionAr = bullishProbability > bearishProbability ? "صاعد" : "هابط"
+
+// Confidence Level
+confidenceLevel = math.abs(bullishProbability - 50)
+
+// Entry Quality Score
+entryQuality = 0.0
+entryQuality += (confidenceLevel > 30 ? 30 : confidenceLevel)
+entryQuality += (volConfirm ? 25 : 0)
+entryQuality += (srStrength)
+entryQuality += (patternScore > 0 ? 20 : 0)
+
+// ====================== BUY/SELL SIGNALS WITH PREDICTION ======================
+
+buySignal = swingLow and 
+            bullishProbability > 65 and
+            confidenceLevel > 20 and
+            volConfirm and
+            rsi < 50
+
+sellSignal = swingHigh and 
+             bearishProbability > 65 and
+             confidenceLevel > 20 and
+             volConfirm and
+             rsi > 50
+
+// ====================== PREDICTED PRICE TARGETS ======================
+
+atrValue = ta.atr(14)
+
+// Buy Targets
+buyTP1 = close + (atrValue * (isScalping ? 0.5 : (isSwing ? 1.5 : 3)))
+buyTP2 = close + (atrValue * (isScalping ? 1 : (isSwing ? 2.5 : 5)))
+buySL = close - (atrValue * (isScalping ? 0.3 : (isSwing ? 0.8 : 1.5)))
+
+// Sell Targets
+sellTP1 = close - (atrValue * (isScalping ? 0.5 : (isSwing ? 1.5 : 3)))
+sellTP2 = close - (atrValue * (isScalping ? 1 : (isSwing ? 2.5 : 5)))
+sellSL = close + (atrValue * (isScalping ? 0.3 : (isSwing ? 0.8 : 1.5)))
+
+// ====================== PLOTTING ======================
+
+// Peak & Bottom Markers
+plotshape(swingHigh and not sellSignal, title=getLabel("Peak", "قمة"), style=shape.circle, location=location.abovebar, 
+          color=color.new(color.red, 0), size=size.small, text="", textcolor=color.white)
+
+plotshape(swingLow and not buySignal, title=getLabel("Bottom", "قاع"), style=shape.circle, location=location.belowbar, 
+          color=color.new(color.green, 0), size=size.small, text="", textcolor=color.white)
+
+// Main BUY Signal
+plotshape(buySignal, title=getLabel("🤖 AI BUY", "🤖 شراء"), style=shape.triangleup, location=location.belowbar, 
+          color=color.new(color.green, 0), size=size.large, text="", textcolor=color.white)
+
+// Main SELL Signal
+plotshape(sellSignal, title=getLabel("🤖 AI SELL", "🤖 بيع"), style=shape.triangledown, location=location.abovebar, 
+          color=color.new(color.red, 0), size=size.large, text="", textcolor=color.white)
+
+// Entry Quality Zones
+if buySignal
+    lineColor = entryQuality > 75 ? color.new(color.green, 30) : (entryQuality > 60 ? color.new(color.lime, 30) : color.new(color.green, 50))
+    line.new(bar_index, buySL, bar_index + 10, buySL, xloc=xloc.bar_index, color=lineColor, width=2, style=line.solid)
+    line.new(bar_index, buyTP1, bar_index + 10, buyTP1, xloc=xloc.bar_index, color=lineColor, width=1, style=line.dashed)
+    line.new(bar_index, buyTP2, bar_index + 10, buyTP2, xloc=xloc.bar_index, color=lineColor, width=1, style=line.dotted)
+
+if sellSignal
+    lineColor = entryQuality > 75 ? color.new(color.red, 30) : (entryQuality > 60 ? color.new(color.maroon, 30) : color.new(color.red, 50))
+    line.new(bar_index, sellSL, bar_index + 10, sellSL, xloc=xloc.bar_index, color=lineColor, width=2, style=line.solid)
+    line.new(bar_index, sellTP1, bar_index + 10, sellTP1, xloc=xloc.bar_index, color=lineColor, width=1, style=line.dashed)
+    line.new(bar_index, sellTP2, bar_index + 10, sellTP2, xloc=xloc.bar_index, color=lineColor, width=1, style=line.dotted)
+
+// Bar Color
+barcolor(buySignal ? color.new(color.green, 40) : (sellSignal ? color.new(color.red, 40) : na))
+
+// ====================== PREDICTION TABLE ======================
+
+if barstate.islast
+    var table predictionTable = table.new(position=position.bottom_right, columns=2, rows=8, 
+                                          border_color=na, border_width=0, frame_color=na, frame_width=0)
+    
+    // Get labels
+    strategyText = isScalping ? getLabel("⚡ SCALP", "⚡ مضاربة") : (isSwing ? getLabel("📊 SWING", "📊 تأرجح") : getLabel("📈 DAILY", "📈 يومي"))
+    marketText = isCrypto ? getLabel("🪙 CRYPTO", "🪙 عملات") : (isForex ? getLabel("💱 FOREX", "💱 فوركس") : (isGold ? getLabel("🥇 GOLD", "🥇 ذهب") : (isIndices ? getLabel("📊 IDX", "📊 مؤشرات") : getLabel("📈 STK", "📈 أسهم"))))
+    
+    predictionHeader = strategyText + " | " + marketText
+    
+    // Row 0: Header
+    table.cell(predictionTable, 0, 0, predictionHeader, bgcolor=color.new(color.blue, 80), text_color=color.white, text_size=size.small, text_halign=text.align_center)
+    table.cell(predictionTable, 1, 0, "⏱ " + currentTimeframe, bgcolor=color.new(color.blue, 80), text_color=color.white, text_size=size.small, text_halign=text.align_right)
+    
+    // Row 1: Next Move Prediction
+    nextMoveLabel = language == "EN" ? "📈 Next Move" : "📈 الحركة القادمة"
+    predictionColor = bullishProbability > 50 ? color.new(color.green, 80) : color.new(color.red, 80)
+    predictionText = language == "EN" ? nextMovePrediction : nextMovePredictionAr
+    
+    table.cell(predictionTable, 0, 1, nextMoveLabel, bgcolor=predictionColor, text_color=color.white, text_size=size.small)
+    table.cell(predictionTable, 1, 1, predictionText, bgcolor=predictionColor, text_color=color.white, text_size=size.small, text_halign=text.align_right)
+    
+    // Row 2: Bullish Probability
+    bullLabel = language == "EN" ? "📊 Bull %" : "📊 نسبة صعود"
+    table.cell(predictionTable, 0, 2, bullLabel, bgcolor=color.new(color.teal, 80), text_color=color.white, text_size=size.small)
+    table.cell(predictionTable, 1, 2, str.tostring(math.round(bullishProbability, 1)) + "%", bgcolor=color.new(color.teal, 80), text_color=color.white, text_size=size.small, text_halign=text.align_right)
+    
+    // Row 3: Bearish Probability
+    bearLabel = language == "EN" ? "📊 Bear %" : "📊 نسبة هبوط"
+    table.cell(predictionTable, 0, 3, bearLabel, bgcolor=color.new(color.orange, 80), text_color=color.white, text_size=size.small)
+    table.cell(predictionTable, 1, 3, str.tostring(math.round(bearishProbability, 1)) + "%", bgcolor=color.new(color.orange, 80), text_color=color.white, text_size=size.small, text_halign=text.align_right)
+    
+    // Row 4: Confidence Level
+    confidenceLabel = language == "EN" ? "🎯 Confidence" : "🎯 الثقة"
+    confidenceColor = confidenceLevel > 40 ? color.new(color.green, 80) : (confidenceLevel > 25 ? color.new(color.blue, 80) : color.new(color.gray, 80))
+    table.cell(predictionTable, 0, 4, confidenceLabel, bgcolor=confidenceColor, text_color=color.white, text_size=size.small)
+    table.cell(predictionTable, 1, 4, str.tostring(math.round(confidenceLevel, 1)) + "%", bgcolor=confidenceColor, text_color=color.white, text_size=size.small, text_halign=text.align_right)
+    
+    // Row 5: Entry Quality
+    qualityLabel = language == "EN" ? "⭐ Entry Quality" : "⭐ جودة الدخول"
+    qualityColor = entryQuality > 75 ? color.new(color.green, 80) : (entryQuality > 60 ? color.new(color.lime, 80) : color.new(color.red, 80))
+    qualityRating = entryQuality > 75 ? "EXCELLENT" : (entryQuality > 60 ? "GOOD" : "FAIR")
+    qualityRatingAr = entryQuality > 75 ? "ممتاز" : (entryQuality > 60 ? "جيد" : "مقبول")
+    qualityText = language == "EN" ? qualityRating : qualityRatingAr
+    
+    table.cell(predictionTable, 0, 5, qualityLabel, bgcolor=qualityColor, text_color=color.white, text_size=size.small)
+    table.cell(predictionTable, 1, 5, qualityText, bgcolor=qualityColor, text_color=color.white, text_size=size.small, text_halign=text.align_right)
+    
+    // Row 6: Trend Direction
+    trendLabel = language == "EN" ? "📍 Trend" : "📍 الاتجاه"
+    trendColor = trendPrediction > 0 ? color.new(color.green, 80) : color.new(color.red, 80)
+    trendText = trendPrediction > 0 ? (language == "EN" ? "↑ UP" : "↑ صاعد") : (language == "EN" ? "↓ DOWN" : "↓ هابط")
+    
+    table.cell(predictionTable, 0, 6, trendLabel, bgcolor=trendColor, text_color=color.white, text_size=size.small)
+    table.cell(predictionTable, 1, 6, trendText, bgcolor=trendColor, text_color=color.white, text_size=size.small, text_halign=text.align_right)
+    
+    // Row 7: Volume Confirmation
+    volLabel = language == "EN" ? "📈 Volume" : "📈 الحجم"
+    volColor = volConfirm ? color.new(color.green, 80) : color.new(color.gray, 80)
+    volText = volConfirm ? (language == "EN" ? "HIGH ✓" : "عالي ✓") : (language == "EN" ? "LOW" : "منخفض")
+    
+    table.cell(predictionTable, 0, 7, volLabel, bgcolor=volColor, text_color=color.white, text_size=size.small)
+    table.cell(predictionTable, 1, 7, volText, bgcolor=volColor, text_color=color.white, text_size=size.small, text_halign=text.align_right)
+
+// ====================== ALERTS ======================
+
+if buySignal
+    buyAlertMsg = language == "EN" ? 
+        "🤖 BUY SIGNAL! Trend: " + nextMovePrediction + " | Confidence: " + str.tostring(math.round(bullishProbability, 1)) + "% | Entry Quality: " + str.tostring(math.round(entryQuality, 1)) + "/100 | TP1: " + str.tostring(math.round(buyTP1, 4)) + " | TP2: " + str.tostring(math.round(buyTP2, 4)) + " | SL: " + str.tostring(math.round(buySL, 4)) :
+        "🤖 إشارة شراء! الاتجاه: " + nextMovePredictionAr + " | الثقة: " + str.tostring(math.round(bullishProbability, 1)) + "% | جودة الدخول: " + str.tostring(math.round(entryQuality, 1)) + "/100 | TP1: " + str.tostring(math.round(buyTP1, 4)) + " | TP2: " + str.tostring(math.round(buyTP2, 4)) + " | SL: " + str.tostring(math.round(buySL, 4))
+    alert(buyAlertMsg, alert.freq_once_per_bar_close)
+
+if sellSignal
+    sellAlertMsg = language == "EN" ? 
+        "🤖 SELL SIGNAL! Trend: " + nextMovePrediction + " | Confidence: " + str.tostring(math.round(bearishProbability, 1)) + "% | Entry Quality: " + str.tostring(math.round(entryQuality, 1)) + "/100 | TP1: " + str.tostring(math.round(sellTP1, 4)) + " | TP2: " + str.tostring(math.round(sellTP2, 4)) + " | SL: " + str.tostring(math.round(sellSL, 4)) :
+        "🤖 إشارة بيع! الاتجاه: " + nextMovePredictionAr + " | الثقة: " + str.tostring(math.round(bearishProbability, 1)) + "% | جودة الدخول: " + str.tostring(math.round(entryQuality, 1)) + "/100 | TP1: " + str.tostring(math.round(sellTP1, 4)) + " | TP2: " + str.tostring(math.round(sellTP2, 4)) + " | SL: " + str.tostring(math.round(sellSL, 4))
+    alert(sellAlertMsg, alert.freq_once_per_bar_close)
